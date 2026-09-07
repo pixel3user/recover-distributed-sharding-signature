@@ -9,6 +9,7 @@ permissions:
 jobs:
   trials:
     name: Patched Harbor paired trials
+    environment: DA_tech_trialsTB2
     runs-on: ubuntu-24.04
     timeout-minutes: 150
     env:

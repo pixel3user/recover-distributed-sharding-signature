@@ -1,0 +1,99 @@
+name: Run Harbor trials
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  trials:
+    name: Patched Harbor paired trials
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      TASK_PATH: ${{ github.workspace }}
+    steps:
+      - name: Check out submission
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Download provided worker tools
+        run: |
+          set -euo pipefail
+          mkdir -p worker-tools
+          curl --fail --location --silent --show-error \
+            --output worker-tools/ummon-worker-tools.zip \
+            'https://drive.google.com/uc?export=download&id=1t9dYJNsTS_GfkM0Le8gVNDkN4Ezzn9Qu'
+          unzip -q worker-tools/ummon-worker-tools.zip -d worker-tools
+
+      - name: Install patched Harbor
+        run: |
+          set -euo pipefail
+          bash worker-tools/ummon-worker-tools/install_patched_harbor.sh
+          echo "$(uv tool dir --bin)" >> "$GITHUB_PATH"
+
+      - name: Write supplied trial configuration
+        run: |
+          set -euo pipefail
+          test -n "$GEMINI_API_KEY"
+          test -n "$ANTHROPIC_API_KEY"
+          cat > agents.yaml <<'YAML'
+          agents:
+            - name: opencode
+              model_name: google/aenea
+              env:
+                GEMINI_API_BASE: https://app-llmproxy.dataannotation.tech/api/llm_proxy/gemini/v1beta
+                GOOGLE_BASE_URL: https://app-llmproxy.dataannotation.tech/api/llm_proxy/gemini/v1beta
+                GOOGLE_GENERATIVE_AI_API_KEY: "${GEMINI_API_KEY}"
+                OPENCODE_DISABLE_AUTOUPDATE: "true"
+                OPENCODE_DISABLE_TERMINAL_TITLE: "true"
+              kwargs:
+                version: 1.18.18
+                opencode_config:
+                  provider:
+                    google:
+                      options:
+                        baseURL: https://app-llmproxy.dataannotation.tech/api/llm_proxy/gemini/v1beta
+            - name: opencode
+              model_name: anthropic/scylla
+              env:
+                ANTHROPIC_BASE_URL: https://app-llmproxy.dataannotation.tech/api/llm_proxy/anthropic
+                OPENCODE_DISABLE_AUTOUPDATE: "true"
+                OPENCODE_DISABLE_TERMINAL_TITLE: "true"
+              kwargs:
+                version: 1.18.18
+                opencode_config:
+                  provider:
+                    anthropic:
+                      options:
+                        baseURL: https://app-llmproxy.dataannotation.tech/api/llm_proxy/anthropic/v1
+          YAML
+          printf 'GEMINI_API_KEY=%s\nANTHROPIC_API_KEY=%s\n' \
+            "$GEMINI_API_KEY" "$ANTHROPIC_API_KEY" > proxy.env
+          chmod 600 proxy.env
+
+      - name: Run paired Harbor trials
+        run: |
+          set -euo pipefail
+          harbor run \
+            --config agents.yaml \
+            --path "$TASK_PATH" \
+            --env-file proxy.env \
+            --jobs-dir ./jobs \
+            --job-name "github-${{ github.run_id }}" \
+            --n-concurrent 2 \
+            --yes
+
+      - name: Upload trial artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harbor-jobs-${{ github.run_id }}
+          path: jobs/
+          if-no-files-found: warn
+          retention-days: 14

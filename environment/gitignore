@@ -1,0 +1,10 @@
+# Build-artifact ignore injected into the cloned PyTorch checkout after it is populated.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+*.log
+.venv/
+venv/
+.env
+.DS_Store

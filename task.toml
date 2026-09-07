@@ -1,0 +1,30 @@
+[metadata]
+task_id = "recover-distributed-sharding-signature"
+difficulty = "hard"
+description = "Extend PyTorch's DistributedSampler module with a self-contained compatibility signature recovered from archived distributed-sharding queries."
+category = "model_training_ml_infrastructure"
+tags = ["python", "pytorch", "distributed-training", "reverse-engineering", "data-sharding"]
+
+[verifier]
+timeout_sec = 900.0
+network_mode = "no-network"
+
+[agent]
+timeout_sec = 3600.0
+network_mode = "allowlist"
+allowed_hosts = ["app-llmproxy.dataannotation.tech"]
+
+[environment]
+build_timeout_sec = 900.0
+cpus = 2
+memory_mb = 4096
+storage_mb = 10240
+network_mode = "public"
+
+[[verifier.collect]]
+service = "main"
+command = "git config --global --add safe.directory /app; git -C /app add -A; git -C /app diff v0.1.0-init > /tmp/patch.diff 2>/dev/null; true"
+
+[[artifacts]]
+source = "/tmp/patch.diff"
+destination = "patch.diff"
